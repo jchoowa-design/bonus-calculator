@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>TH Weekly Bonus Calculator</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', sans-serif; background: #f0f4f8; padding: 24px; }
+  .container { max-width: 960px; margin: 0 auto; background: #fff; border-radius: 12px; padding: 28px; box-shadow: 0 2px 12px rgba(0,0,0,0.1); }
+  h2 { font-size: 20px; margin-bottom: 4px; color: #1a1a2e; }
+  .subtitle { color: #666; font-size: 13px; margin-bottom: 20px; }
+  .section-label { font-weight: 600; margin-right: 12px; font-size: 14px; }
+  .btn-group { display: flex; gap: 8px; margin-bottom: 20px; align-items: center; }
+  .btn-pos { padding: 7px 24px; border-radius: 6px; border: none; cursor: pointer; font-weight: 700; font-size: 14px; transition: all 0.2s; }
+  .btn-pos.active { background: #4472C4; color: #fff; }
+  .btn-pos.inactive { background: #e0e0e0; color: #333; }
+  .grid-header { display: grid; grid-template-columns: 110px 110px 130px 100px 80px 110px 40px; gap: 6px; margin-bottom: 6px; }
+  .grid-row { display: grid; grid-template-columns: 110px 110px 130px 100px 80px 110px 40px; gap: 6px; margin-bottom: 8px; align-items: center; }
+  .col-label { font-size: 11px; font-weight: 600; color: #555; }
+  select, input[type=number] { padding: 6px 8px; border-radius: 4px; border: 1px solid #ccc; font-size: 12px; width: 100%; }
+  .monthly-display { padding: 6px 8px; background: #f5f5f5; border-radius: 4px; font-size: 12px; color: #444; border: 1px solid #eee; }
+  .btn-remove { background: #ff6b6b; color: #fff; border: none; border-radius: 4px; cursor: pointer; padding: 6px 8px; font-size: 13px; width: 100%; }
+  .action-row { display: flex; gap: 10px; margin-bottom: 24px; margin-top: 4px; }
+  .btn-add { padding: 8px 18px; border-radius: 6px; border: 1px dashed #4472C4; background: #fff; color: #4472C4; cursor: pointer; font-weight: 600; font-size: 13px; }
+  .btn-calc { padding: 8px 28px; border-radius: 6px; border: none; background: #4472C4; color: #fff; cursor: pointer; font-weight: 700; font-size: 14px; }
+  .btn-reset { padding: 8px 18px; border-radius: 6px; border: 1px solid #ccc; background: #fff; color: #666; cursor: pointer; font-size: 13px; }
+  .not-qualified { background: #ffe0e0; border: 1px solid #ffaaaa; border-radius: 8px; padding: 16px; }
+  .not-qualified .title { font-weight: 700; color: #c00; margin-bottom: 6px; font-size: 15px; }
+  .not-qualified .reason { font-size: 13px; color: #555; }
+  .summary-box { background: #e8f5e9; border: 1px solid #a5d6a7; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .summary-title { font-weight: 700; color: #2e7d32; margin-bottom: 12px; font-size: 14px; }
+  .summary-numbers { display: flex; gap: 28px; flex-wrap: wrap; }
+  .summary-item .label { font-size: 11px; color: #555; margin-bottom: 2px; }
+  .summary-item .value { font-weight: 700; font-size: 20px; }
+  .value.green { color: #2e7d32; }
+  .value.orange { color: #e65100; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  th { background: #4472C4; color: #fff; padding: 8px 10px; text-align: left; white-space: nowrap; }
+  td { padding: 7px 10px; white-space: nowrap; }
+  .tag { font-weight: 600; }
+  .legend { display: flex; gap: 20px; margin-top: 14px; flex-wrap: wrap; }
+  .legend-item { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+  .legend-dot { width: 14px; height: 14px; border-radius: 3px; }
+  .warning-box { background: #fff8e1; border: 1px solid #ffe082; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; font-size: 13px; color: #795548; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h2>🇹🇭 TH Weekly Bonus Calculator</h2>
+  <p class="subtitle">Enter your signups for the week to see your estimated bonus payout</p>
+
+  <div class="btn-group">
+    <span class="section-label">Position:</span>
+    <button class="btn-pos active" id="btn-fr" onclick="setPosition('FR')">FR</button>
+    <button class="btn-pos inactive" id="btn-tl" onclick="setPosition('TL')">TL</button>
+  </div>
+
+  <div class="grid-header">
+    <div class="col-label">Card Type</div>
+    <div class="col-label">Site</div>
+    <div class="col-label">Amount (THB)</div>
+    <div class="col-label">Frequency</div>
+    <div class="col-label">Donor Age</div>
+    <div class="col-label">Monthly Amt</div>
+    <div class="col-label"></div>
+  </div>
+  <div id="cards-container"></div>
+
+  <div class="action-row">
+    <button class="btn-add" onclick="addCard()">+ Add Card</button>
+    <button class="btn-calc" onclick="calculate()">Calculate</button>
+    <button class="btn-reset" onclick="resetAll()">Reset</button>
+  </div>
+
+  <div id="result"></div>
+</div>
+
+<script>
+let position = "FR";
+let cards = [newCard()];
+
+function newCard() {
+  return { cardType: "CREDIT", site: "Event", amount: "", frequency: 1, age: "" };
+}
+
+function setPosition(p) {
+  position = p;
+  document.getElementById("btn-fr").className = "btn-pos " + (p === "FR" ? "active" : "inactive");
+  document.getElementById("btn-tl").className = "btn-pos " + (p === "TL" ? "active" : "inactive");
+}
+
+function addCard() {
+  cards.push(newCard());
+  renderCards();
+}
+
+function removeCard(i) {
+  if (cards.length === 1) return;
+  cards.splice(i, 1);
+  renderCards();
+}
+
+function updateCard(i, field, value) {
+  cards[i][field] = field === "frequency" ? parseInt(value) : value;
+  // Only re-render for dropdowns (select), not text inputs
+  if (field === "cardType" || field === "site" || field === "frequency") {
+    renderCards();
+  } else {
+    // Just update the monthly display without re-rendering
+    updateMonthlyDisplay(i);
+  }
+}
+
+function updateMonthlyDisplay(i) {
+  const c = cards[i];
+  const monthly = c.amount !== "" ? getMonthly(c.amount, c.frequency) : null;
+  const el = document.getElementById("monthly-" + i);
+  if (el) el.textContent = monthly !== null ? "฿" + monthly.toLocaleString() : "-";
+}
+
+function getMonthly(amount, freq) {
+  const a = parseFloat(amount) || 0;
+  if (freq === 6) return Math.round(a / 6);
+  if (freq === 12) return Math.round(a / 12);
+  return a;
+}
+
+function renderCards() {
+  const container = document.getElementById("cards-container");
+  container.innerHTML = cards.map((c, i) => {
+    const monthly = c.amount !== "" ? getMonthly(c.amount, c.frequency) : null;
+    return `
+    <div class="grid-row">
+      <select onchange="updateCard(${i},'cardType',this.value)">
+        <option value="CREDIT" ${c.cardType==="CREDIT"?"selected":""}>Credit</option>
+        <option value="DEBIT" ${c.cardType==="DEBIT"?"selected":""}>Debit</option>
+      </select>
+      <select onchange="updateCard(${i},'site',this.value)">
+        <option value="Event" ${c.site==="Event"?"selected":""}>Event</option>
+        <option value="Street" ${c.site==="Street"?"selected":""}>Street</option>
+        <option value="Travel Trip" ${c.site==="Travel Trip"?"selected":""}>Travel Trip</option>
+      </select>
+      <input type="number" placeholder="e.g. 650" value="${c.amount}" oninput="cards[${i}].amount=this.value;updateMonthlyDisplay(${i})"/>
+      <select onchange="updateCard(${i},'frequency',this.value)">
+        <option value="1" ${c.frequency===1?"selected":""}>Monthly</option>
+        <option value="6" ${c.frequency===6?"selected":""}>6-Month</option>
+        <option value="12" ${c.frequency===12?"selected":""}>Yearly</option>
+      </select>
+      <input type="number" placeholder="Age" value="${c.age}" oninput="cards[${i}].age=this.value"/>
+      <div class="monthly-display" id="monthly-${i}">${monthly !== null ? "฿" + monthly.toLocaleString() : "-"}</div>
+      <button class="btn-remove" onclick="removeCard(${i})">✕</button>
+    </div>`;
+  }).join("");
+}
+
+function getAgeGroup(age) {
+  if (age >= 40) return "40+";
+  if (age >= 35) return "35 - 39";
+  if (age >= 30) return "30 - 34";
+  if (age >= 26) return "26 - 29";
+  return null;
+}
+
+const MULTIPLIERS = {
+  CREDIT: { "26 - 29": 1.5, "30 - 34": 2, "35 - 39": 2.5, "40+": 3 },
+  DEBIT:  { "26 - 29": 0,   "30 - 34": 0.5, "35 - 39": 1, "40+": 1 }
+};
+
+function calcPay(monthly, cardType, age, site) {
+  const ageGroup = getAgeGroup(age);
+  if (!ageGroup) return { pay100: 0, multiplier: 0, ageGroup: "Below 26" };
+  let multiplier = MULTIPLIERS[cardType][ageGroup] || 0;
+  if (site === "Street") multiplier = multiplier * 1.2;
+  return { pay100: monthly * multiplier, multiplier, ageGroup };
+}
+
+function fmt(n) { return "฿" + n.toLocaleString("en", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+function tagColor(tag) {
+  if (tag === "Payable") return "#90EE90";
+  if (tag === "Qualify") return "#FFD700";
+  if (tag === "Not Payable") return "#FF9999";
+  return "#eee";
+}
+
+function calculate() {
+  const parsed = cards.map(c => ({
+    ...c,
+    amount: parseFloat(c.amount) || 0,
+    age: parseFloat(c.age) || 0,
+    monthly: getMonthly(c.amount, c.frequency)
+  }));
+
+  // Bonusable >= 500
+  const bonusable = parsed.filter(c => c.monthly >= 500);
+  if (bonusable.length === 0) {
+    showNotQualified("No bonusable cards found. All cards must have monthly amount ≥ 500 THB.");
+    return;
+  }
+
+  // Qualifier >= 600
+  const qualifier = bonusable.filter(c => c.monthly >= 600);
+
+  // Qualify check
+  const qualCC30 = qualifier.filter(c => c.cardType === "CREDIT" && c.age >= 30)
+    .sort((a, b) => calcPay(a.monthly, a.cardType, a.age, a.site).pay100 - calcPay(b.monthly, b.cardType, b.age, b.site).pay100);
+  const qualDC40 = qualifier.filter(c => c.cardType === "DEBIT" && c.age >= 40)
+    .sort((a, b) => calcPay(a.monthly, a.cardType, a.age, a.site).pay100 - calcPay(b.monthly, b.cardType, b.age, b.site).pay100);
+
+  let qualified = false, qualifyVia = null;
+  if (position === "FR") {
+    qualified = qualCC30.length >= 2;
+    qualifyVia = qualified ? "FR" : null;
+  } else {
+    const optA = qualCC30.length >= 2 && qualDC40.length >= 1;
+    const optB = qualCC30.length >= 3;
+    qualified = optA || optB;
+    qualifyVia = optA ? "A" : (optB ? "B" : null);
+  }
+
+  if (!qualified) {
+    showNotQualified(position === "FR"
+      ? "Need at least 2 Credit cards with donor age ≥ 30 and monthly amount ≥ 600 THB."
+      : "Need Option A: 2 CC age≥30 + 1 DC age≥40 (≥600/month), OR Option B: 3 CC age≥30 (≥600/month).");
+    return;
+  }
+
+  // Tag qualify cards
+  let qualifySet = new Set();
+  let qualifyCards = [];
+  if (position === "FR") {
+    qualifyCards = qualCC30.slice(0, 2);
+  } else {
+    qualifyCards = qualifyVia === "A"
+      ? [...qualCC30.slice(0, 2), ...qualDC40.slice(0, 1)]
+      : qualCC30.slice(0, 3);
+  }
+  qualifyCards.forEach(c => qualifySet.add(c));
+
+  // DC slots
+  const allCC     = bonusable.filter(c => c.cardType === "CREDIT");
+  const eventCC   = allCC.filter(c => c.site !== "Travel Trip");
+  const travelCC  = allCC.filter(c => c.site === "Travel Trip");
+
+  let eventDCSlots  = Math.floor(eventCC.length / 3);
+  let travelDCSlots = travelCC.length;
+
+  // Option A cost — subtract from Travel first then Event
+  if (position === "TL" && qualifyVia === "A") {
+    const qualDCCards  = qualifyCards.filter(c => c.cardType === "DEBIT");
+    const totalDeduct  = qualDCCards.length;
+    const travelDeduct = Math.min(totalDeduct, travelDCSlots);
+    travelDCSlots -= travelDeduct;
+    eventDCSlots  -= Math.max(totalDeduct - travelDeduct, 0);
+  }
+
+  eventDCSlots  = Math.max(eventDCSlots, 0);
+  travelDCSlots = Math.max(travelDCSlots, 0);
+
+  // DC candidates
+  const dcCandidates = bonusable
+    .filter(c => c.cardType === "DEBIT" && c.age >= 30 && !qualifySet.has(c))
+    .sort((a, b) => calcPay(b.monthly, b.cardType, b.age, b.site).pay100 - calcPay(a.monthly, a.cardType, a.age, a.site).pay100);
+
+  const dcTravel = dcCandidates.filter(c => c.site === "Travel Trip");
+  const dcEvent  = dcCandidates.filter(c => c.site !== "Travel Trip");
+
+  const payableDCSet = new Set();
+
+  // Travel CC → Travel DC
+  dcTravel.slice(0, travelDCSlots).forEach(c => payableDCSet.add(c));
+
+  // Event CC → remaining Travel DC
+  let remainingTravel = travelDCSlots - Math.min(dcTravel.length, travelDCSlots);
+  if (remainingTravel > 0) {
+    const unpaidTravel = dcTravel.filter(c => !payableDCSet.has(c));
+    unpaidTravel.slice(0, remainingTravel).forEach(c => payableDCSet.add(c));
+    eventDCSlots = Math.max(eventDCSlots - remainingTravel, 0);
+  }
+
+  // Event CC → Event DC
+  dcEvent.slice(0, eventDCSlots).forEach(c => payableDCSet.add(c));
+
+  // Unused Travel slots spill to Event DC at 3:1
+  const unusedTravel = travelDCSlots - Math.min(dcTravel.length, travelDCSlots);
+  const spillSlots   = unusedTravel > 0 ? Math.floor(travelCC.length / 3) : 0;
+  if (spillSlots > 0) {
+    const paidEvent = dcEvent.filter(c => payableDCSet.has(c)).length;
+    dcEvent.slice(paidEvent).slice(0, spillSlots).forEach(c => payableDCSet.add(c));
+  }
+
+  // Build result rows
+  const rows = bonusable.map(c => {
+    const { pay100, multiplier, ageGroup } = calcPay(c.monthly, c.cardType, c.age, c.site);
+    let tag = "Not Payable";
+    if (qualifySet.has(c)) tag = "Qualify";
+    else if (c.cardType === "CREDIT") tag = "Payable";
+    else if (payableDCSet.has(c)) tag = "Payable";
+    return { ...c, pay100, pay70: pay100 * 0.7, pay30: pay100 * 0.3, multiplier, ageGroup, tag };
+  });
+
+  // High value warning
+  const highValue = rows.filter(r => r.tag === "Payable" && r.pay100 >= 15000);
+
+  const totalPay100 = rows.filter(r => r.tag === "Payable").reduce((s, r) => s + r.pay100, 0);
+  const totalPay70  = totalPay100 * 0.7;
+  const totalPay30  = totalPay100 * 0.3;
+
+  const qualLabel = qualifyVia === "A" ? "Option A (2 CC age≥30 + 1 DC age≥40)"
+    : qualifyVia === "B" ? "Option B (3 CC age≥30)"
+    : "FR criteria (2 CC age≥30)";
+
+  let html = `
+    ${highValue.length > 0 ? `<div class="warning-box">⚠️ <strong>High value card detected</strong> — ${highValue.length} card(s) with 100% Pay ≥ ฿15,000. Please flag for manager review.</div>` : ""}
+    <div class="summary-box">
+      <div class="summary-title">✅ Qualified via ${qualLabel}</div>
+      <div class="summary-numbers">
+        <div class="summary-item"><div class="label">Total 100%</div><div class="value">฿${totalPay100.toLocaleString("en",{minimumFractionDigits:2,maximumFractionDigits:2})}</div></div>
+        <div class="summary-item"><div class="label">70% Paid Now</div><div class="value green">฿${totalPay70.toLocaleString("en",{minimumFractionDigits:2,maximumFractionDigits:2})}</div></div>
+        <div class="summary-item"><div class="label">30% Held (3 months)</div><div class="value orange">฿${totalPay30.toLocaleString("en",{minimumFractionDigits:2,maximumFractionDigits:2})}</div></div>
+      </div>
+    </div>
+    <div style="overflow-x:auto">
+    <table>
+      <thead><tr>
+        <th>#</th><th>Card Type</th><th>Site</th><th>Monthly</th><th>Age</th><th>Age Group</th><th>Multiplier</th><th>100% Pay</th><th>70% Pay</th><th>30% Held</th><th>Tag</th>
+      </tr></thead>
+      <tbody>
+        ${rows.map((r, i) => `
+        <tr style="background:${tagColor(r.tag)}">
+          <td>${i+1}</td>
+          <td>${r.cardType}</td>
+          <td>${r.site}</td>
+          <td>฿${r.monthly.toLocaleString()}</td>
+          <td>${r.age}</td>
+          <td>${r.ageGroup || "-"}</td>
+          <td>${r.multiplier.toFixed(1)}x</td>
+          <td>${fmt(r.pay100)}</td>
+          <td>${fmt(r.pay70)}</td>
+          <td>${fmt(r.pay30)}</td>
+          <td class="tag">${r.tag}</td>
+        </tr>`).join("")}
+      </tbody>
+    </table>
+    </div>
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#90EE90"></div>Payable</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#FFD700"></div>Qualify (not paid)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#FF9999"></div>Not Payable</div>
+    </div>`;
+
+  document.getElementById("result").innerHTML = html;
+}
+
+function showNotQualified(reason) {
+  document.getElementById("result").innerHTML = `
+    <div class="not-qualified">
+      <div class="title">❌ Not Qualified for Bonus</div>
+      <div class="reason">${reason}</div>
+    </div>`;
+}
+
+function resetAll() {
+  cards = [newCard()];
+  setPosition("FR");
+  renderCards();
+  document.getElementById("result").innerHTML = "";
+}
+
+renderCards();
+</script>
+</body>
+</html>
