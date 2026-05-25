@@ -163,15 +163,30 @@ function getAgeGroup(age) {
 }
 
 const MULTIPLIERS = {
-  CREDIT: { "26 - 29": 1.5, "30 - 34": 2, "35 - 39": 2.5, "40+": 3 },
-  DEBIT:  { "26 - 29": 0,   "30 - 34": 0.5, "35 - 39": 1, "40+": 1 }
+  CREDIT: {
+    "below700": { "26 - 29": 1.5, "30 - 34": 2,   "35 - 39": 2.5, "40+": 3   },
+    "700+":     { "26 - 29": 0,   "30 - 34": 2,   "35 - 39": 2.5, "40+": 3   },
+  },
+  DEBIT: {
+    "below700": { "26 - 29": 0,   "30 - 34": 0.5, "35 - 39": 1,   "40+": 1   },
+    "700+":     { "26 - 29": 0,   "30 - 34": 0.5, "35 - 39": 1,   "40+": 1   },
+  },
+  CREDIT_STREET: {
+    "below700": { "26 - 29": 1.8, "30 - 34": 2.4, "35 - 39": 3,   "40+": 3.6 },
+    "700+":     { "26 - 29": 0,   "30 - 34": 2.4, "35 - 39": 3,   "40+": 3.6 },
+  },
+  DEBIT_STREET: {
+    "below700": { "26 - 29": 0,   "30 - 34": 0.6, "35 - 39": 1.2, "40+": 1.2 },
+    "700+":     { "26 - 29": 0,   "30 - 34": 0.6, "35 - 39": 1.2, "40+": 1.2 },
+  },
 };
 
 function calcPay(monthly, cardType, age, site) {
   const ageGroup = getAgeGroup(age);
   if (!ageGroup) return { pay100: 0, multiplier: 0, ageGroup: "Below 26" };
-  let multiplier = MULTIPLIERS[cardType][ageGroup] || 0;
-  if (site === "Street") multiplier = multiplier * 1.2;
+  const amtBracket = monthly >= 700 ? "700+" : "below700";
+  const typeKey = cardType + (site === "Street" ? "_STREET" : "");
+  const multiplier = MULTIPLIERS[typeKey]?.[amtBracket]?.[ageGroup] ?? 0;
   return { pay100: monthly * multiplier, multiplier, ageGroup };
 }
 
