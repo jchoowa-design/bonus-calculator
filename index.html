@@ -273,7 +273,7 @@ function calculate() {
   eventDCSlots  = Math.max(eventDCSlots, 0);
   travelDCSlots = Math.max(travelDCSlots, 0);
 
-  // DC candidates
+  // DC candidates (age>=30, not used to qualify), best-paying first
   const dcCandidates = bonusable
     .filter(c => c.cardType === "DEBIT" && c.age >= 30 && !qualifySet.has(c))
     .sort((a, b) => calcPay(b.monthly, b.cardType, b.age, b.site).pay100 - calcPay(a.monthly, a.cardType, a.age, a.site).pay100);
@@ -283,26 +283,22 @@ function calculate() {
 
   const payableDCSet = new Set();
 
-  // Travel CC → Travel DC
-  dcTravel.slice(0, travelDCSlots).forEach(c => payableDCSet.add(c));
+  // 1) Travel debits take Travel DC slots first (1 travel CC : 1 travel DC)
+  const travelPaid = dcTravel.slice(0, travelDCSlots);
+  travelPaid.forEach(c => payableDCSet.add(c));
+  const unpaidTravel = dcTravel.slice(travelPaid.length);
 
-  // Event CC → remaining Travel DC
-  let remainingTravel = travelDCSlots - Math.min(dcTravel.length, travelDCSlots);
-  if (remainingTravel > 0) {
-    const unpaidTravel = dcTravel.filter(c => !payableDCSet.has(c));
-    unpaidTravel.slice(0, remainingTravel).forEach(c => payableDCSet.add(c));
-    eventDCSlots = Math.max(eventDCSlots - remainingTravel, 0);
-  }
+  // 2) Event debits take Event DC slots first (3 event CC : 1 event DC)
+  const eventPaid = dcEvent.slice(0, eventDCSlots);
+  eventPaid.forEach(c => payableDCSet.add(c));
+  const leftoverEventSlots = eventDCSlots - eventPaid.length;
 
-  // Event CC → Event DC
-  dcEvent.slice(0, eventDCSlots).forEach(c => payableDCSet.add(c));
-
-  // Unused Travel slots spill to Event DC at 3:1
-  const unusedTravel = travelDCSlots - Math.min(dcTravel.length, travelDCSlots);
-  const spillSlots   = unusedTravel > 0 ? Math.floor(travelCC.length / 3) : 0;
-  if (spillSlots > 0) {
-    const paidEvent = dcEvent.filter(c => payableDCSet.has(c)).length;
-    dcEvent.slice(paidEvent).slice(0, spillSlots).forEach(c => payableDCSet.add(c));
+  // 3) NEW RULE — a surplus Travel debit may use a LEFTOVER Event slot
+  //    (doc rule 3.7: "if they have a slot left for Event we can pay DC from Travel").
+  //    This is the only cross-fill direction; there is deliberately NO reverse rule
+  //    (an Event debit is never paid from a leftover Travel slot).
+  if (leftoverEventSlots > 0 && unpaidTravel.length > 0) {
+    unpaidTravel.slice(0, leftoverEventSlots).forEach(c => payableDCSet.add(c));
   }
 
   // Build result rows
