@@ -199,6 +199,81 @@ function tagColor(tag) {
   return "#eee";
 }
 
+// ── Tagging for one chosen DC-40 qualifier ──────────────────────────────────
+// Returns { qualifySet, payableDCSet } for the given qualify path. dcQualCard is
+// the DEBIT (age 40+) spent as the qualifier for a TL Option-A qualify (else null).
+function assignTags(bonusable, position, qualifyVia, qualCC30, qualDC40, dcQualCard) {
+  let qualifySet = new Set();
+  let qualifyCards = [];
+  if (position === "FR") {
+    qualifyCards = qualCC30.slice(0, 2);
+  } else if (qualifyVia === "A") {
+    qualifyCards = [...qualCC30.slice(0, 2), dcQualCard];
+  } else { // Option B
+    qualifyCards = qualCC30.slice(0, 3);
+  }
+  qualifyCards.forEach(c => qualifySet.add(c));
+
+  // DC slots
+  const allCC    = bonusable.filter(c => c.cardType === "CREDIT");
+  const eventCC  = allCC.filter(c => c.site !== "Travel Trip");
+  const travelCC = allCC.filter(c => c.site === "Travel Trip");
+
+  let eventDCSlots  = Math.floor(eventCC.length / 3);
+  let travelDCSlots = travelCC.length;
+
+  // Option A cost — subtract from Travel first then Event
+  if (position === "TL" && qualifyVia === "A") {
+    const totalDeduct  = qualifyCards.filter(c => c.cardType === "DEBIT").length;
+    const travelDeduct = Math.min(totalDeduct, travelDCSlots);
+    travelDCSlots -= travelDeduct;
+    eventDCSlots  -= Math.max(totalDeduct - travelDeduct, 0);
+  }
+  eventDCSlots  = Math.max(eventDCSlots, 0);
+  travelDCSlots = Math.max(travelDCSlots, 0);
+
+  // DC candidates (age>=30, not used to qualify), best-paying first
+  const dcCandidates = bonusable
+    .filter(c => c.cardType === "DEBIT" && c.age >= 30 && !qualifySet.has(c))
+    .sort((a, b) => calcPay(b.monthly, b.cardType, b.age, b.site).pay100 - calcPay(a.monthly, a.cardType, a.age, a.site).pay100);
+
+  const dcTravel = dcCandidates.filter(c => c.site === "Travel Trip");
+  const dcEvent  = dcCandidates.filter(c => c.site !== "Travel Trip");
+
+  const payableDCSet = new Set();
+
+  // 1) Travel debits take Travel DC slots first (1 travel CC : 1 travel DC)
+  const travelPaid = dcTravel.slice(0, travelDCSlots);
+  travelPaid.forEach(c => payableDCSet.add(c));
+  const unpaidTravel = dcTravel.slice(travelPaid.length);
+
+  // 2) Event debits take Event DC slots first (3 event CC : 1 event DC)
+  const eventPaid = dcEvent.slice(0, eventDCSlots);
+  eventPaid.forEach(c => payableDCSet.add(c));
+  const leftoverEventSlots = eventDCSlots - eventPaid.length;
+
+  // 3) Cross-fill — a surplus Travel debit may use a LEFTOVER Event slot
+  //    (doc rule 3.7). One direction only: an Event debit is never paid from a
+  //    leftover Travel slot.
+  if (leftoverEventSlots > 0 && unpaidTravel.length > 0) {
+    unpaidTravel.slice(0, leftoverEventSlots).forEach(c => payableDCSet.add(c));
+  }
+
+  return { qualifySet, payableDCSet };
+}
+
+// The bonus is paid on Payable cards only (Qualify cards unlock but earn nothing).
+function payableTotalOf(bonusable, qualifySet, payableDCSet) {
+  let total = 0;
+  bonusable.forEach(c => {
+    if (qualifySet.has(c)) return;                 // Qualify → not paid
+    if (c.cardType === "CREDIT" || payableDCSet.has(c)) {
+      total += calcPay(c.monthly, c.cardType, c.age, c.site).pay100;
+    }
+  });
+  return total;
+}
+
 function calculate() {
   const parsed = cards.map(c => ({
     ...c,
@@ -241,64 +316,21 @@ function calculate() {
     return;
   }
 
-  // Tag qualify cards
-  let qualifySet = new Set();
-  let qualifyCards = [];
-  if (position === "FR") {
-    qualifyCards = qualCC30.slice(0, 2);
-  } else {
-    qualifyCards = qualifyVia === "A"
-      ? [...qualCC30.slice(0, 2), ...qualDC40.slice(0, 1)]
-      : qualCC30.slice(0, 3);
-  }
-  qualifyCards.forEach(c => qualifySet.add(c));
-
-  // DC slots
-  const allCC     = bonusable.filter(c => c.cardType === "CREDIT");
-  const eventCC   = allCC.filter(c => c.site !== "Travel Trip");
-  const travelCC  = allCC.filter(c => c.site === "Travel Trip");
-
-  let eventDCSlots  = Math.floor(eventCC.length / 3);
-  let travelDCSlots = travelCC.length;
-
-  // Option A cost — subtract from Travel first then Event
+  // Choose which cards become the qualifiers.
+  // For a TL Option-A qualify, pick the DC (age 40+) qualifier that MAXIMISES the
+  // Payable total — the qualifier card is unpaid, so spend the debit that couldn't
+  // be paid anyway and keep a slot-eligible debit Payable. (Matches the Python script.)
+  let qualifySet, payableDCSet;
   if (position === "TL" && qualifyVia === "A") {
-    const qualDCCards  = qualifyCards.filter(c => c.cardType === "DEBIT");
-    const totalDeduct  = qualDCCards.length;
-    const travelDeduct = Math.min(totalDeduct, travelDCSlots);
-    travelDCSlots -= travelDeduct;
-    eventDCSlots  -= Math.max(totalDeduct - travelDeduct, 0);
-  }
-
-  eventDCSlots  = Math.max(eventDCSlots, 0);
-  travelDCSlots = Math.max(travelDCSlots, 0);
-
-  // DC candidates (age>=30, not used to qualify), best-paying first
-  const dcCandidates = bonusable
-    .filter(c => c.cardType === "DEBIT" && c.age >= 30 && !qualifySet.has(c))
-    .sort((a, b) => calcPay(b.monthly, b.cardType, b.age, b.site).pay100 - calcPay(a.monthly, a.cardType, a.age, a.site).pay100);
-
-  const dcTravel = dcCandidates.filter(c => c.site === "Travel Trip");
-  const dcEvent  = dcCandidates.filter(c => c.site !== "Travel Trip");
-
-  const payableDCSet = new Set();
-
-  // 1) Travel debits take Travel DC slots first (1 travel CC : 1 travel DC)
-  const travelPaid = dcTravel.slice(0, travelDCSlots);
-  travelPaid.forEach(c => payableDCSet.add(c));
-  const unpaidTravel = dcTravel.slice(travelPaid.length);
-
-  // 2) Event debits take Event DC slots first (3 event CC : 1 event DC)
-  const eventPaid = dcEvent.slice(0, eventDCSlots);
-  eventPaid.forEach(c => payableDCSet.add(c));
-  const leftoverEventSlots = eventDCSlots - eventPaid.length;
-
-  // 3) NEW RULE — a surplus Travel debit may use a LEFTOVER Event slot
-  //    (doc rule 3.7: "if they have a slot left for Event we can pay DC from Travel").
-  //    This is the only cross-fill direction; there is deliberately NO reverse rule
-  //    (an Event debit is never paid from a leftover Travel slot).
-  if (leftoverEventSlots > 0 && unpaidTravel.length > 0) {
-    unpaidTravel.slice(0, leftoverEventSlots).forEach(c => payableDCSet.add(c));
+    let best = null;
+    qualDC40.forEach(dcCard => {
+      const t = assignTags(bonusable, position, qualifyVia, qualCC30, qualDC40, dcCard);
+      const total = payableTotalOf(bonusable, t.qualifySet, t.payableDCSet);
+      if (best === null || total > best.total) best = { ...t, total };
+    });
+    ({ qualifySet, payableDCSet } = best);
+  } else {
+    ({ qualifySet, payableDCSet } = assignTags(bonusable, position, qualifyVia, qualCC30, qualDC40, null));
   }
 
   // Build result rows
